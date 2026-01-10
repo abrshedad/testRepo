@@ -4,7 +4,7 @@
 class RemoteDB {
     private $apiUrl;
 
-    public function __construct($apiUrl = 'https://xb.xhawala.com/testConn.php') {
+    public function __construct($apiUrl = 'https://xb.xhawala.com/connection.php') {
         $this->apiUrl = $apiUrl;
     }
 
@@ -65,4 +65,22 @@ class RemoteDB {
         ]);
     }
 
-    public function discardCartela(str
+    public function discardCartela(string $phone, int $cartelaId) {
+        return $this->request('discardCartela', [
+            'phone' => $phone,
+            'cartelaId' => $cartelaId
+        ]);
+    }
+
+    public function checkBingoWinners(array $phoneCartelas, int $lastShownNumber) {
+        return $this->request('checkBingoWinners', [
+            'phoneCartelas' => $phoneCartelas,
+            'lastShownNumber' => $lastShownNumber
+        ]);
+    }
+
+    // Add more wrapper methods here as needed
+}
+
+// Instantiate global object
+$conn = new RemoteDB();
