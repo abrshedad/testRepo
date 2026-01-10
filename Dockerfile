@@ -11,4 +11,4 @@ COPY . /app
 RUN docker-php-ext-install mysqli && apt-get update && apt-get install -y curl
 
 # Command to run your test script by default
-CMD ["php", "testRender.php"]
+CMD ["php", "server.php"]
