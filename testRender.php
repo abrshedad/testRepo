@@ -61,7 +61,7 @@ class GameServer implements MessageComponentInterface {
         }
 
         foreach ($data['latest_rows'] as $row) {
-            $id = $row['id'];
+            $id = $row['No'];
             $num = $row['UserName']; // adjust field if different
 
             if ($id > $this->lastInsertId) {
