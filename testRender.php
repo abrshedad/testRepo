@@ -69,7 +69,6 @@ class GameServer implements MessageComponentInterface {
 
             echo "\n".$id." ::: ".$num."\n";
 
-            if ($id > $this->lastInsertId) {
                 $this->lastInsertId = $id;
                 $this->sentNumbers[] = $num;
 
@@ -78,12 +77,10 @@ class GameServer implements MessageComponentInterface {
                     'value' => $num,
                     'all' => $this->sentNumbers
                 ]);
-
-              
-            }
-            foreach ($this->clients as $client) {
-                $client->send($msg);
-            }
+                foreach ($this->clients as $client) {
+                    $client->send($msg);
+                }
+            
         }
     }
 
