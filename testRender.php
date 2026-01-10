@@ -1,7 +1,8 @@
 <?php
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED);
+
 require __DIR__ . '/vendor/autoload.php';
-requier __DIR__ . '/testActivity.php';
+require __DIR__ . '/testActivity.php';
 
 use Ratchet\MessageComponentInterface;
 use Ratchet\ConnectionInterface;
@@ -12,6 +13,7 @@ use Ratchet\Http\HttpServer;
 use Ratchet\WebSocket\WsServer;
 
 class GameServer implements MessageComponentInterface {
+
     protected $clients;
     protected $loop;
     protected $testTimer;
@@ -25,23 +27,26 @@ class GameServer implements MessageComponentInterface {
         $this->testTimer = $loop;
         $this->apiUrl = $apiUrl;
 
-        // Start polling every 5 seconds
+        // Timer 1 (kept exactly as-is)
         $this->loop->addPeriodicTimer(5, function () {
             echo "fetch data\n";
-            //$this->fetchDataFromApi();
+            // $this->fetchDataFromApi();
         });
 
-        $this->loop->addPeriodicTimer(5,function(){
-            echo "fetch status from testActivity";
+        // Timer 2: fetch status from testActivity.php
+        $this->loop->addPeriodicTimer(5, function () {
+            echo "fetch status from testActivity\n";
             $status = getDetail();
             echo $status."\n";
-            foreach ($this->clients as $client) {
-                $client->send($status);
+            if ($status !== null) {
+                foreach ($this->clients as $client) {
+                    $client->send(json_encode($status));
+                }
             }
         });
     }
 
-    /** 🔄 Fetch data from testcon.php API */
+    /** 🔄 Fetch data from testcon.php API (unused, left intact) */
     protected function fetchDataFromApi() {
         $ch = curl_init($this->apiUrl);
 
@@ -62,12 +67,14 @@ class GameServer implements MessageComponentInterface {
         ]);
 
         $response = curl_exec($ch);
-        curl_close($ch);
 
         if ($response === false) {
             echo "CURL ERROR: " . curl_error($ch) . "\n";
+            curl_close($ch);
             return;
         }
+
+        curl_close($ch);
 
         $data = json_decode($response, true);
         if (!$data || !isset($data['latest_rows'])) {
@@ -77,22 +84,22 @@ class GameServer implements MessageComponentInterface {
 
         foreach ($data['latest_rows'] as $row) {
             $id = $row['No'];
-            $num = $row['UserName']; // adjust field if different
+            $num = $row['UserName'];
 
-            echo "\n".$id." ::: ".$num."\n";
+            echo $id . " ::: " . $num . "\n";
 
-                $this->lastInsertId = $id;
-                $this->sentNumbers[] = $num;
+            $this->lastInsertId = $id;
+            $this->sentNumbers[] = $num;
 
-                $msg = json_encode([
-                    'type' => 'number',
-                    'value' => $num,
-                    'all' => $this->sentNumbers
-                ]);
-                foreach ($this->clients as $client) {
-                    $client->send($msg);
-                }
-            
+            $msg = json_encode([
+                'type' => 'number',
+                'value' => $num,
+                'all' => $this->sentNumbers
+            ]);
+
+            foreach ($this->clients as $client) {
+                $client->send($msg);
+            }
         }
     }
 
@@ -108,7 +115,7 @@ class GameServer implements MessageComponentInterface {
     }
 
     public function onMessage(ConnectionInterface $from, $msg) {
-        // Not used, but required by Ratchet
+        // Required by Ratchet, intentionally unused
     }
 
     public function onClose(ConnectionInterface $client) {
@@ -122,9 +129,10 @@ class GameServer implements MessageComponentInterface {
     }
 }
 
-// Boot up WebSocket server
+// Boot server
 $loop = LoopFactory::create();
-$apiUrl = "https://xb.xhawala.com/testcon.php"; // your API endpoint
+$apiUrl = "https://xb.xhawala.com/testcon.php";
+
 $gameServer = new GameServer($loop, $apiUrl);
 
 $webSocket = new WsServer($gameServer);
