@@ -41,7 +41,8 @@ class GameServer implements MessageComponentInterface {
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_HTTPHEADER => [
                 "X-API-KEY: 8f4d9c7a2b1e6f3d9a0b5c1e7f2d4a6b",
-                "Content-Type: application/json"
+                "Content-Type: application/json",
+                "User-Agent: Render-WebSocket/1.0"
             ],
             CURLOPT_POST => true,
             CURLOPT_POSTFIELDS => json_encode($postData),
