@@ -1,41 +1,118 @@
 <?php
-$apiUrl = "https://xb.xhawala.com/testcon.php";
+require __DIR__ . '/vendor/autoload.php';
 
-// Message to send
-$message = "Hello from Render at " . date('H:i:s');
+use Ratchet\MessageComponentInterface;
+use Ratchet\ConnectionInterface;
+use React\EventLoop\Factory as LoopFactory;
+use React\Socket\Server as ReactServer;
+use Ratchet\Server\IoServer;
+use Ratchet\Http\HttpServer;
+use Ratchet\WebSocket\WsServer;
 
-// JSON data to send
-$postData = [
-    'Purpose' => 'addData',
-    'Data' => $message
-];
+class GameServer implements MessageComponentInterface {
+    protected $clients;
+    protected $loop;
+    protected $apiUrl;
+    protected $lastInsertId = 0;
+    protected $sentNumbers = [];
 
-$ch = curl_init($apiUrl);
+    public function __construct($loop, $apiUrl) {
+        $this->clients = new \SplObjectStorage;
+        $this->loop = $loop;
+        $this->apiUrl = $apiUrl;
 
-curl_setopt_array($ch, [
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_HTTPHEADER => [
-        "X-API-KEY: 8f4d9c7a2b1e6f3d9a0b5c1e7f2d4a6b",
-        "Content-Type: application/json" // tell server it's JSON
-    ],
-    CURLOPT_TIMEOUT => 10,
-    CURLOPT_POST => true,
-    CURLOPT_POSTFIELDS => json_encode($postData) // encode as JSON
-]);
+        // Start polling every 5 seconds
+        $this->loop->addPeriodicTimer(5, function () {
+            $this->fetchDataFromApi();
+        });
+    }
 
-$response = curl_exec($ch);
+    /** 🔄 Fetch data from testcon.php API */
+    protected function fetchDataFromApi() {
+        $ch = curl_init($this->apiUrl);
 
-if ($response === false) {
-    echo "Curl error: " . curl_error($ch);
-    exit;
+        $postData = [
+            'Purpose' => 'getData'
+        ];
+
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => [
+                "X-API-KEY: 8f4d9c7a2b1e6f3d9a0b5c1e7f2d4a6b",
+                "Content-Type: application/json"
+            ],
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => json_encode($postData),
+            CURLOPT_TIMEOUT => 5
+        ]);
+
+        $response = curl_exec($ch);
+        curl_close($ch);
+
+        if (!$response) {
+            echo "API fetch failed\n";
+            return;
+        }
+
+        $data = json_decode($response, true);
+        if (!$data || !isset($data['latest_rows'])) {
+            echo "Invalid JSON from API: " . $response . "\n";
+            return;
+        }
+
+        foreach ($data['latest_rows'] as $row) {
+            $id = $row['id'];
+            $num = $row['UserName']; // adjust field if different
+
+            if ($id > $this->lastInsertId) {
+                $this->lastInsertId = $id;
+                $this->sentNumbers[] = $num;
+
+                $msg = json_encode([
+                    'type' => 'number',
+                    'value' => $num,
+                    'all' => $this->sentNumbers
+                ]);
+
+                foreach ($this->clients as $client) {
+                    $client->send($msg);
+                }
+            }
+        }
+    }
+
+    /** 🔗 WebSocket Handlers */
+    public function onOpen(ConnectionInterface $client) {
+        $this->clients->attach($client);
+        echo "New connection: {$client->resourceId}\n";
+
+        $client->send(json_encode([
+            'type' => 'status',
+            'all' => $this->sentNumbers
+        ]));
+    }
+
+    public function onClose(ConnectionInterface $client) {
+        $this->clients->detach($client);
+        echo "Connection {$client->resourceId} closed\n";
+    }
+
+    public function onError(ConnectionInterface $client, \Exception $e) {
+        echo "Error: {$e->getMessage()}\n";
+        $client->close();
+    }
 }
 
-$data = json_decode($response, true);
+// Boot up WebSocket server
+$loop = LoopFactory::create();
+$apiUrl = "https://xb.xhawala.com/testcon.php"; // your API endpoint
+$gameServer = new GameServer($loop, $apiUrl);
 
-if (!$data) {
-    echo "Invalid JSON response: " . $response;
-    exit;
-}
+$webSocket = new WsServer($gameServer);
+$httpServer = new HttpServer($webSocket);
 
-echo "API Response:\n";
-print_r($data);
+$socket = new ReactServer('0.0.0.0:8999', $loop);
+$server = new IoServer($httpServer, $socket, $loop);
+
+echo "Server started on ws://localhost:8999\n";
+$loop->run();
