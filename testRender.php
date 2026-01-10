@@ -28,7 +28,7 @@ class GameServer implements MessageComponentInterface {
         // Start polling every 5 seconds
         $this->loop->addPeriodicTimer(5, function () {
             echo "fetch data\n";
-            $this->fetchDataFromApi();
+            //$this->fetchDataFromApi();
         });
 
         $this->loop->addPeriodicTimer(5,function(){
