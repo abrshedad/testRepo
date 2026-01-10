@@ -37,7 +37,7 @@ class GameServer implements MessageComponentInterface {
         $this->loop->addPeriodicTimer(5, function () {
             echo "fetch status from testActivity\n";
             $status = getDetail();
-            echo $status."\n";
+            print_r($status);
             if ($status !== null) {
                 foreach ($this->clients as $client) {
                     $client->send(json_encode($status));
