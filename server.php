@@ -1,7 +1,8 @@
 <?php
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED);
+
 require __DIR__ . '/vendor/autoload.php';
-require "connection.php";  // this file must set up a mysqli connection, e.g. $conn = new mysqli(...);
+require "connection.php";        // Provides $conn (API wrapper)
 require_once __DIR__ . '/bingoActions.php';
 
 use Ratchet\MessageComponentInterface;
@@ -19,12 +20,13 @@ class GameServer implements MessageComponentInterface {
     protected $running = false;
     protected $paused = false;
     protected $refresh = false;
-    protected $lastShownNumber = 0 ;
+    protected $lastShownNumber = 0;
     protected $sentNumbers = [];
     protected $goodBingoTimer;
     protected $gameStartTimer;
     protected $conn;
     protected $gameSpeed = 3;
+    protected $pendingPauses = [];
 
     public function __construct($loop, $dbConn) {
         $this->clients = new \SplObjectStorage;
@@ -32,14 +34,12 @@ class GameServer implements MessageComponentInterface {
         $this->conn = $dbConn;
 
         echo "GameServer initialized.\n";
-        
     }
+
     private function startPeriodicRefresh($secs) {
-        // Periodic refresh for inactive betting
-        static $countdownTimer = null; // track the countdown timer
+        static $countdownTimer = null;
         static $remainingTime = 0;
 
-        // Cancel existing countdown if running
         if ($countdownTimer) {
             $this->loop->cancelTimer($countdownTimer);
             $countdownTimer = null;
@@ -47,7 +47,6 @@ class GameServer implements MessageComponentInterface {
 
         $remainingTime = $secs;
 
-        // Start a new countdown timer
         $countdownTimer = $this->loop->addPeriodicTimer(1, function() use (&$remainingTime, &$countdownTimer) {
             if ($remainingTime <= 0) {
                 echo "\n⏱ Countdown finished.\n";
@@ -56,7 +55,6 @@ class GameServer implements MessageComponentInterface {
                 return;
             }
 
-            // Send remaining time to all clients
             $refreshMessage = json_encode([
                 'type' => 'refresh',
                 'message' => 'Betting is started... &#128523;',
@@ -67,26 +65,22 @@ class GameServer implements MessageComponentInterface {
                 $client->send($refreshMessage);
             }
 
-            //echo "⏱ Time remaining: {$remainingTime}s\r";
             $remainingTime--;
         });
     }
 
-
-    /** 🔁 START POST-GAME TIMER WITH RETRY LOGIC */
     private function startPostGameTimer($secs) {
         if ($this->goodBingoTimer) {
             $this->loop->cancelTimer($this->goodBingoTimer);
         }
 
-        echo "⏳ 15-second post-game timer started...\n";
+        echo "⏳ Post-game timer started...\n";
 
         $this->goodBingoTimer = $this->loop->addTimer($secs, function () {
             $success = afterGoodBingoAction($this->conn);
 
             if (!$success) {
                 echo "🔁 Action failed — retrying in 5s\n";
-                // Retry after 5 seconds
                 $this->loop->addTimer(5, function () {
                     $this->startPostGameTimer(0);
                 });
@@ -108,7 +102,6 @@ class GameServer implements MessageComponentInterface {
         });
     }
 
-    /** 🔁 START BETTING TIMER WITH RETRY LOGIC */
     private function startBetting($secs) {
         $this->running = false;
         $this->paused = false;
@@ -119,10 +112,9 @@ class GameServer implements MessageComponentInterface {
             $this->loop->cancelTimer($this->gameStartTimer);
         }
 
-        echo "⏳ 1-minute post-game timer started...\n";
+        echo "⏳ Betting timer started...\n";
 
         $this->gameStartTimer = $this->loop->addTimer(40, function () {
-            // Check if all cartelas are taken
             if (checkIfAllCartelasTaken($this->conn)) {
                 echo "✅ All cartelas taken — starting game immediately\n";
                 $this->startGameImmediately();
@@ -134,22 +126,19 @@ class GameServer implements MessageComponentInterface {
     }
 
     private function startGameImmediately() {
-        // 1️⃣ Check number of players before starting
         $numPlayers = checkNoOfPlayers($this->conn);
         if ($numPlayers <= 1) {
             echo "⚠️ Not enough players ($numPlayers) — restarting timer\n";
-            $this->startBetting(40); // or any default timer seconds you want
-            return; // stop further execution
+            $this->startBetting(40);
+            return;
         }
 
-        // 2️⃣ Cancel any existing timer
         if ($this->gameStartTimer) {
             $this->loop->cancelTimer($this->gameStartTimer);
             $this->gameStartTimer = null;
         }
 
         $success = startTheGame($this->conn);
-
         if (!$success) {
             echo "🔁 Action failed — retrying in 5s\n";
             $this->loop->addTimer(5, function () {
@@ -160,7 +149,6 @@ class GameServer implements MessageComponentInterface {
 
         echo "📢 Bingo is now starting\n";
 
-        // 3️⃣ Start the game
         $this->running = true;
         $this->paused = false;
         $this->refresh = false;
@@ -174,53 +162,25 @@ class GameServer implements MessageComponentInterface {
         $this->startGame();
     }
 
-    public function checkBingo(array $phoneClientMap)
-    {
+    public function checkBingo(array $phoneClientMap) {
         if (empty($phoneClientMap)) {
-            $this->paused  = false;
+            $this->paused = false;
             $this->refresh = false;
-
-            $resumeMsg = json_encode([
-                'type' => 'resumed',
-                'message' => 'Game resumed'
-            ]);
-
+            $resumeMsg = json_encode(['type' => 'resumed', 'message' => 'Game resumed']);
             foreach ($this->clients as $c) {
                 $c->send($resumeMsg);
             }
             return;
         }
 
-        /* -------------------------------------------------
-           1️⃣ Prepare phone → cartelas map
-        ------------------------------------------------- */
         $phoneCartelas = [];
         foreach ($phoneClientMap as $phone => $data) {
             $phoneCartelas[$phone] = $data['cartelas'];
         }
 
-        /* -------------------------------------------------
-           2️⃣ Check bingo ONLY for requested cartelas
-        ------------------------------------------------- */
-        $allResults = checkBingoWinners(
-            $this->conn,
-            $phoneCartelas,
-            $this->lastShownNumber
-        );
-        /*
-          Expected result:
-          [
-            phone => [
-              cartelaId => [ 'winner' => true/false, ... ]
-            ]
-          ]
-        */
+        $allResults = checkBingoWinners($this->conn, $phoneCartelas, $this->lastShownNumber);
 
-        /* -------------------------------------------------
-           3️⃣ Collect winning phones
-        ------------------------------------------------- */
         $winnerPhones = [];
-
         foreach ($allResults as $phone => $cards) {
             foreach ($cards as $cardData) {
                 if (!empty($cardData['winner'])) {
@@ -232,13 +192,9 @@ class GameServer implements MessageComponentInterface {
 
         $winnerPhones = array_unique($winnerPhones);
         $totalWinners = count($winnerPhones);
-        $hasWinner    = $totalWinners > 0;
+        $hasWinner = $totalWinners > 0;
 
-        /* -------------------------------------------------
-           4️⃣ Filter cartelas to broadcast
-        ------------------------------------------------- */
         $resultsToSend = [];
-
         foreach ($allResults as $phone => $cards) {
             foreach ($cards as $cartelaId => $cardData) {
                 if (!$hasWinner || !empty($cardData['winner'])) {
@@ -247,181 +203,106 @@ class GameServer implements MessageComponentInterface {
             }
         }
 
-        /* -------------------------------------------------
-           5️⃣ Broadcast cartela details to ALL clients
-        ------------------------------------------------- */
         foreach ($this->clients as $c) {
             $c->send(json_encode([
                 'type' => 'cartelaDetail',
-                'message' => $hasWinner
-                    ? 'Winning cartela(s)'
-                    : 'Cartela details for all paused clients',
+                'message' => $hasWinner ? 'Winning cartela(s)' : 'Cartela details',
                 'cartelaDetail' => $resultsToSend
             ]));
         }
 
-        /* -------------------------------------------------
-           6️⃣ Notify players & discard losing cartelas
-        ------------------------------------------------- */
         foreach ($phoneClientMap as $phone => $data) {
-
-            $client   = $data['from'];
+            $client = $data['from'];
             $cartelas = $data['cartelas'];
-
             $hasWinningCartela = false;
-
             $discardedCartelas = [];
 
             foreach ($cartelas as $cartelaId) {
                 if (!empty($allResults[$phone][$cartelaId]['winner'])) {
                     $hasWinningCartela = true;
                 } else {
-                    // ❌ Discard ONLY this cartela
                     discardCartela($this->conn, $phone, $cartelaId);
                     $discardedCartelas[] = $cartelaId;
                 }
             }
 
             if ($hasWinningCartela) {
-
                 $client->send(json_encode([
                     'type' => 'congra',
-                    'message' => "🎉🎊 Congratulations! 🎊🎉\n\nYou Won the Bingo! 🏆",
+                    'message' => "🎉 Congratulations! 🎉 You won!",
                     'winningCartelas' => array_keys(array_filter(
                         $allResults[$phone],
-                        function($c) {
-                            return !empty($c['winner']);
-                        }
+                        fn($c) => !empty($c['winner'])
                     ))
                 ]));
-
             } else {
-
                 $client->send(json_encode([
                     'type' => 'discarded',
-                    'message' => "❌ Sorry, none of your paused cards won.",
+                    'message' => "❌ None of your paused cards won.",
                     'discardedCartelas' => $discardedCartelas
                 ]));
             }
-
         }
 
-        /* -------------------------------------------------
-           7️⃣ Pay winners (once)
-        ------------------------------------------------- */
         if ($hasWinner) {
             $this->loop->addTimer(3, function () use ($winnerPhones, $totalWinners) {
-
                 foreach ($winnerPhones as $phone) {
-                    error_log("Paying winner $phone | Total winners: $totalWinners");
                     payWinner($this->conn, $phone, $totalWinners);
                 }
-
                 $this->startPostGameTimer(3);
             });
-            return;
+        } else {
+            $this->loop->addTimer(5, function () {
+                foreach ($this->clients as $c) {
+                    $c->send(json_encode(['type' => 'resumed', 'message' => 'Game resumed']));
+                }
+            });
         }
-
-        /* -------------------------------------------------
-           8️⃣ Resume game if no winners
-        ------------------------------------------------- */
-        $this->loop->addTimer(5, function () {
-
-            if ($this->timer && $this->timer != null) {
-                $this->paused  = false;
-                $this->refresh = false;
-            } else if (isNoCartelaTaken($this->conn)) {
-                $this->running     = true;
-                $this->paused      = false;
-                $this->refresh     = false;
-                $this->sentNumbers = [];
-
-                $this->startPostGameTimer(3);
-            }
-
-            foreach ($this->clients as $c) {
-                $c->send(json_encode([
-                    'type' => 'resumed',
-                    'message' => 'Game resumed'
-                ]));
-            }
-
-            mysqli_query($this->conn, "UPDATE currentactivity SET Playing = 1");
-        });
     }
 
-    /** 🔢 START GAME NUMBERS */
     public function startGame() {
-        if ($this->timer) {
-            $this->loop->cancelTimer($this->timer);
-            $lastShownNumber = 0;
-        }
+        if ($this->timer) $this->loop->cancelTimer($this->timer);
 
         $this->timer = $this->loop->addPeriodicTimer($this->gameSpeed, function () {
-            if (!$this->running || $this->paused) {
-                return;
-            }
+            if (!$this->running || $this->paused) return;
 
-            $query = mysqli_query($this->conn, "SELECT * FROM winner LIMIT 1");
-            if (!$query || mysqli_num_rows($query) === 0) {
+            $winnerData = $this->conn->request("getWinner");
+            if (!$winnerData || empty($winnerData['Winners'])) {
                 echo "No winner record found.\n";
                 return;
             }
 
-            $row = mysqli_fetch_assoc($query);
-            $res = $row["Winners"];
-            $cpos = (int)$row["NoOfWinnersShown"];
-
-            //echo "Current position: $cpos\n";
+            $res = $winnerData["Winners"];
+            $cpos = (int)$winnerData["NoOfWinnersShown"];
 
             if ($cpos >= strlen($res)) {
-                error_log("All numbers shown. Stopping.");
+                $this->loop->cancelTimer($this->timer);
+                $this->timer = null;
 
-                // Stop the periodic timer
-                if ($this->timer) {
-                    $this->loop->cancelTimer($this->timer);
-                    $this->timer = null;
-                }
-
-                // Optional: start post-game actions if needed
-                if(isNoCartelaTaken($this->conn)){
+                if (isNoCartelaTaken($this->conn)) {
                     $this->running = true;
                     $this->paused = false;
                     $this->refresh = false;
                     $this->sentNumbers = [];
-
                     $this->startPostGameTimer(5);
                 }
-
                 return;
             }
 
             $numStr = substr($res, $cpos, 2);
             $random = (int)$numStr;
             $this->sentNumbers[] = $random;
-
-            $message = json_encode([
-                'type' => 'number',
-                'value' => $random,
-                'all' => $this->sentNumbers
-            ]);
-
             $this->lastShownNumber = $random;
 
-            $newPos = $cpos + 2;
-            $upd = mysqli_query($this->conn, "UPDATE winner SET NoOfWinnersShown = $newPos");
-            if (!$upd) {
-                echo "DB update failed: " . mysqli_error($this->conn) . "\n";
-            } else{
-                //echo "Sending number: {$random}\n";
-                foreach ($this->clients as $client) {
-                    $client->send($message);
-                }
+            $this->conn->request("updateWinnerPos", ["newPos" => $cpos + 2]);
+
+            $message = json_encode(['type' => 'number', 'value' => $random, 'all' => $this->sentNumbers]);
+            foreach ($this->clients as $client) {
+                $client->send($message);
             }
         });
     }
 
-    /** 🔗 CLIENT CONNECTION HANDLERS */
     public function onOpen(ConnectionInterface $clientConn) {
         $this->clients->attach($clientConn);
         echo "New connection: {$clientConn->resourceId}\n";
@@ -433,7 +314,7 @@ class GameServer implements MessageComponentInterface {
             'all' => $this->sentNumbers
         ]));
 
-        if ($this->running === false && $this->refresh === false) {
+        if (!$this->running && !$this->refresh) {
             $this->startPostGameTimer(2);
         }
     }
@@ -446,92 +327,37 @@ class GameServer implements MessageComponentInterface {
             case 'pause':
                 $phone = $data['phone'] ?? null;
                 $cartelaId = $data['cartelaId'] ?? null;
+                if (!$phone || !$cartelaId || !$this->running) break;
 
-                // Ignore invalid requests
-                if (!$phone || !$cartelaId || !$this->running) {
-                    echo "Invalid pause request ignored\n";
-                    break;
-                }
-
-                // Game already paused → collect during pause window
-                if ($this->paused && isset($this->pauseTimer)) {
-
+                if ($this->paused) {
                     if (!isset($this->pendingPauses[$phone])) {
-                        $this->pendingPauses[$phone] = [
-                            'from' => $from,
-                            'cartelas' => []
-                        ];
+                        $this->pendingPauses[$phone] = ['from' => $from, 'cartelas' => []];
                     }
-
-                    // Avoid duplicate cartelas
                     if (!in_array($cartelaId, $this->pendingPauses[$phone]['cartelas'], true)) {
                         $this->pendingPauses[$phone]['cartelas'][] = $cartelaId;
-                        echo "Added cartela {$cartelaId} for phone {$phone}\n";
                     }
-
                     break;
                 }
 
-                // Game running → start pause window
                 if (!$this->paused) {
                     $this->paused = true;
-                    $this->refresh = false;
-
-                    $this->pendingPauses = [
-                        $phone => [
-                            'from' => $from,
-                            'cartelas' => [$cartelaId]
-                        ]
-                    ];
-
-                    echo "Pause requested by client {$from->resourceId}, phone {$phone}, cartela {$cartelaId}\n";
-
-                    $this->pauseTimer = $this->loop->addTimer(1, function () {
-
-                        // Notify all clients
-                        $pauseMsg = json_encode([
-                            'type' => 'paused',
-                            'message' => 'Game paused for checking cards'
-                        ]);
-
+                    $this->pendingPauses = [$phone => ['from' => $from, 'cartelas' => [$cartelaId]]];
+                    $this->loop->addTimer(1, function () {
                         foreach ($this->clients as $client) {
-                            $client->send($pauseMsg);
+                            $client->send(json_encode(['type' => 'paused', 'message' => 'Game paused for checking cards']));
                         }
-
-                        // Validate all collected cartelas
                         $this->checkBingo($this->pendingPauses);
-
-                        // Cleanup
                         $this->pendingPauses = [];
-                        unset($this->pauseTimer);
-
-                        echo "CheckBingo completed for all phones/cartelas\n";
+                        $this->paused = false;
                     });
-                } else {
-                    echo "Late pause request ignored for phone {$phone}, cartela {$cartelaId}\n";
                 }
-
                 break;
 
             case 'resume':
-                if ($this->running && $this->paused) {
-                    $this->paused = false;
-                    $this->refresh = false;
-                    $resumeMsg = json_encode([
-                        'type' => 'resumed',
-                        'message' => 'Game resumed'
-                    ]);
-                    foreach ($this->clients as $c) {
-                        $c->send($resumeMsg);
-                    }
-                    echo "Resumed by client {$from->resourceId}\n";
-                } else {
-                    $this->paused = false;
-                    $this->refresh = false;
-                    $this->running = true;
-                    $this->startGame();
-                    echo "Old game restarted\n";
-                }
+                $this->paused = false;
+                $this->refresh = false;
+                $this->running = true;
+                $this->startGame();
                 break;
 
             case 'startGame':
@@ -540,10 +366,7 @@ class GameServer implements MessageComponentInterface {
                 $this->paused = false;
                 $this->refresh = false;
                 $this->sentNumbers = [];
-                $startMessage = json_encode(['type' => $data['type']]);
-                foreach ($this->clients as $c) {
-                    $c->send($startMessage);
-                }
+                foreach ($this->clients as $c) $c->send(json_encode(['type' => $data['type']]));
                 $this->startGame();
                 break;
 
@@ -552,29 +375,15 @@ class GameServer implements MessageComponentInterface {
                 $this->running = false;
                 $this->paused = false;
                 $this->refresh = false;
-                $message = json_encode(['type' => $data['type']]);
-                foreach ($this->clients as $c) {
-                    $c->send($message);
-                }
-
+                foreach ($this->clients as $c) $c->send(json_encode(['type' => $data['type']]));
                 $this->startPostGameTimer(2);
-                break;
-
-            case 'startBetting':
-                $this->running = false;
-                $this->paused = false;
-                $this->refresh = true;
                 break;
 
             case 'gameSpeed':
                 if (isset($data['GameSpeed']) && is_numeric($data['GameSpeed'])) {
                     $this->gameSpeed = (float)$data['GameSpeed'];
-                    echo "Game speed updated to: {$this->gameSpeed} seconds\n";
-
                     if ($this->running && !$this->paused) {
-                        if ($this->timer) {
-                            $this->loop->cancelTimer($this->timer);
-                        }
+                        if ($this->timer) $this->loop->cancelTimer($this->timer);
                         $this->startGame();
                     }
                 }
@@ -593,16 +402,14 @@ class GameServer implements MessageComponentInterface {
     }
 }
 
-// Boot up server
+// Boot up
 $loop = LoopFactory::create();
-require "connection.php";  // ensures $conn is defined
 $gameServer = new GameServer($loop, $conn);
 
 $webSocket = new WsServer($gameServer);
 $httpServer = new HttpServer($webSocket);
-
 $socket = new ReactServer('0.0.0.0:8999', $loop);
 $server = new IoServer($httpServer, $socket, $loop);
 
-echo "Server started on render server\n";
+echo "Server started on port 8999\n";
 $loop->run();
