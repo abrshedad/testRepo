@@ -52,10 +52,10 @@ class GameServer implements MessageComponentInterface {
         $response = curl_exec($ch);
         curl_close($ch);
 
-if ($response === false) {
-    echo "CURL ERROR: " . curl_error($ch) . "\n";
-    return;
-}
+        if ($response === false) {
+            echo "CURL ERROR: " . curl_error($ch) . "\n";
+            return;
+        }
 
         $data = json_decode($response, true);
         if (!$data || !isset($data['latest_rows'])) {
@@ -67,7 +67,7 @@ if ($response === false) {
             $id = $row['No'];
             $num = $row['UserName']; // adjust field if different
 
-            echo "\n".$id." ::: ".$num;
+            echo "\n".$id." ::: ".$num."\n";
 
             if ($id > $this->lastInsertId) {
                 $this->lastInsertId = $id;
@@ -79,9 +79,10 @@ if ($response === false) {
                     'all' => $this->sentNumbers
                 ]);
 
-                foreach ($this->clients as $client) {
-                    $client->send($msg);
-                }
+              
+            }
+            foreach ($this->clients as $client) {
+                $client->send($msg);
             }
         }
     }
