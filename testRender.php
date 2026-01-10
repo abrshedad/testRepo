@@ -93,6 +93,10 @@ class GameServer implements MessageComponentInterface {
         ]));
     }
 
+    public function onMessage(ConnectionInterface $from, $msg) {
+        // Not used, but required by Ratchet
+    }
+
     public function onClose(ConnectionInterface $client) {
         $this->clients->detach($client);
         echo "Connection {$client->resourceId} closed\n";
