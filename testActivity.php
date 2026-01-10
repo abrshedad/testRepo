@@ -1,38 +1,38 @@
 <?php
 
-$apiUrl = "https://xb.xhawala.com/testcon.php"; 
-/**
- * Bingo actions now use $conn (RemoteDB) instead of raw MySQL queries.
- * $conn is injected from connection.php
- */
+$apiUrl = "https://xb.xhawala.com/testcon.php";
 
 function getDetail() {
+    global $apiUrl;
+
     $ch = curl_init($apiUrl);
 
-        $postData = [
-            'Purpose' => 'LoadStatus'
-        ];
+    $postData = [
+        'Purpose' => 'LoadStatus'
+    ];
 
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER => [
-                "X-API-KEY: 8f4d9c7a2b1e6f3d9a0b5c1e7f2d4a6b",
-                "Content-Type: application/json",
-                "User-Agent: Render-WebSocket/1.0"
-            ],
-            CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => json_encode($postData),
-            CURLOPT_TIMEOUT => 5
-        ]);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => [
+            "X-API-KEY: 8f4d9c7a2b1e6f3d9a0b5c1e7f2d4a6b",
+            "Content-Type: application/json",
+            "User-Agent: Render-WebSocket/1.0"
+        ],
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => json_encode($postData),
+        CURLOPT_TIMEOUT => 5
+    ]);
 
-        $response = curl_exec($ch);
+    $response = curl_exec($ch);
+
+    if ($response === false) {
+        echo "CURL ERROR: " . curl_error($ch) . "\n";
         curl_close($ch);
+        return null;
+    }
 
-        if ($response === false) {
-            echo "CURL ERROR: " . curl_error($ch) . "\n";
-            return;
-        }
+    curl_close($ch);
 
-        $data = json_decode($response, true);
-        return $data;
+    $data = json_decode($response, true);
+    return $data;
 }
