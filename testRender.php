@@ -1,6 +1,7 @@
 <?php
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED);
 require __DIR__ . '/vendor/autoload.php';
+requier __DIR__ . '/testActivity.php';
 
 use Ratchet\MessageComponentInterface;
 use Ratchet\ConnectionInterface;
@@ -13,6 +14,7 @@ use Ratchet\WebSocket\WsServer;
 class GameServer implements MessageComponentInterface {
     protected $clients;
     protected $loop;
+    protected $testTimer;
     protected $apiUrl;
     protected $lastInsertId = 0;
     protected $sentNumbers = [];
@@ -20,12 +22,21 @@ class GameServer implements MessageComponentInterface {
     public function __construct($loop, $apiUrl) {
         $this->clients = new \SplObjectStorage;
         $this->loop = $loop;
+        $this->testTimer = $loop;
         $this->apiUrl = $apiUrl;
 
         // Start polling every 5 seconds
         $this->loop->addPeriodicTimer(5, function () {
             echo "fetch data\n";
             $this->fetchDataFromApi();
+        });
+
+        $this->loop->addPeriodicTimer(5,function(){
+            echo "fetch status from testActivity";
+            $status = getDetail();
+            foreach ($this->clients as $client) {
+                $client->send($status);
+            }
         });
     }
 
