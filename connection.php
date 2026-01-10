@@ -1,83 +1,68 @@
 <?php
-error_reporting(E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED);
+// connection.php - local wrapper for remote API
 
-/**
- * This file acts as a proxy to the remote API at xb.xhawala.com
- * All database-like actions are sent to the remote server.
- */
+class RemoteDB {
+    private $apiUrl;
 
-class RemoteDB
-{
-    private $apiBase = "https://xb.xhawala.com/connection.php";
+    public function __construct($apiUrl = 'https://xb.xhawala.com/connection.php') {
+        $this->apiUrl = $apiUrl;
+    }
 
-    // Generic GET or POST request
-    private function request($endpoint, $data = [], $method = "POST") {
-        $url = $this->apiBase . "?action=" . urlencode($endpoint);
+    /**
+     * Send a request to the remote API.
+     * @param string $action The action to perform
+     * @param array $params Optional parameters
+     * @return mixed The decoded JSON response
+     */
+    private function request(string $action, array $params = []) {
+        $params['action'] = $action;
 
-        $ch = curl_init();
-        if ($method === "POST") {
-            curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
-        } else {
-            if (!empty($data)) {
-                $url .= "&" . http_build_query($data);
-            }
-        }
-        curl_setopt($ch, CURLOPT_URL, $url);
+        $ch = curl_init($this->apiUrl);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($params));
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // if using HTTPS, adjust for prod
 
         $response = curl_exec($ch);
+
         if (curl_errno($ch)) {
-            throw new Exception("Remote API error: " . curl_error($ch));
+            throw new Exception('API request error: ' . curl_error($ch));
         }
+
         curl_close($ch);
 
-        return json_decode($response, true);
+        $decoded = json_decode($response, true);
+        if ($decoded === null) {
+            throw new Exception('Invalid JSON response: ' . $response);
+        }
+
+        return $decoded;
     }
 
-    // Example: Query all cartelas
-    public function queryCartelas($params = []) {
-        return $this->request("getCartelas", $params);
+    // Public API methods your server/bingoActions.php will use:
+
+    public function getWinner() {
+        return $this->request('getWinner');
     }
 
-    // Example: Check number of players
+    public function updateWinnerPos(int $pos) {
+        return $this->request('updateWinnerPos', ['pos' => $pos]);
+    }
+
     public function checkNoOfPlayers() {
-        $res = $this->request("checkNoOfPlayers");
-        return $res['count'] ?? 0;
+        return $this->request('checkNoOfPlayers');
     }
 
-    // Example: Start the game
-    public function startTheGame() {
-        $res = $this->request("startTheGame");
-        return $res['success'] ?? false;
+    public function startGame() {
+        return $this->request('startGame');
     }
 
-    // Example: Check bingo winners
-    public function checkBingoWinners($phoneCartelas, $lastNumber) {
-        return $this->request("checkBingoWinners", [
-            "phoneCartelas" => $phoneCartelas,
-            "lastNumber" => $lastNumber
+    public function payWinner(string $phone, int $totalWinners) {
+        return $this->request('payWinner', [
+            'phone' => $phone,
+            'totalWinners' => $totalWinners
         ]);
     }
 
-    // Example: Pay winner
-    public function payWinner($phone, $totalWinners) {
-        return $this->request("payWinner", [
-            "phone" => $phone,
-            "totalWinners" => $totalWinners
-        ]);
-    }
-
-    // Example: Discard a cartela
-    public function discardCartela($phone, $cartelaId) {
-        return $this->request("discardCartela", [
-            "phone" => $phone,
-            "cartelaId" => $cartelaId
-        ]);
-    }
-
-    // Add any other actions you need, like isNoCartelaTaken(), etc.
-}
-
-// Now you can use it as $conn
-$conn = new RemoteDB();
+    public function discardCartela(str
