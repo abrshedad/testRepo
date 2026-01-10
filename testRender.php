@@ -2,11 +2,12 @@
 $apiUrl = "https://xb.xhawala.com/testcon.php";
 
 // Message to send
-$msg = "Hello from Render at " . date('H:i:s');
+$message = "Hello from Render at " . date('H:i:s');
 
-// Data to send in POST body
+// JSON data to send
 $postData = [
-    'msg' => $msg
+    'Purpose' => 'addData',
+    'Data' => $message
 ];
 
 $ch = curl_init($apiUrl);
@@ -15,11 +16,11 @@ curl_setopt_array($ch, [
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_HTTPHEADER => [
         "X-API-KEY: 8f4d9c7a2b1e6f3d9a0b5c1e7f2d4a6b",
-        "Content-Type: application/x-www-form-urlencoded" // important for POST
+        "Content-Type: application/json" // tell server it's JSON
     ],
     CURLOPT_TIMEOUT => 10,
     CURLOPT_POST => true,
-    CURLOPT_POSTFIELDS => http_build_query($postData) // encode data as form
+    CURLOPT_POSTFIELDS => json_encode($postData) // encode as JSON
 ]);
 
 $response = curl_exec($ch);
@@ -38,4 +39,3 @@ if (!$data) {
 
 echo "API Response:\n";
 print_r($data);
-?>
