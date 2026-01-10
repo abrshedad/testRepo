@@ -4,7 +4,7 @@
 class RemoteDB {
     private $apiUrl;
 
-    public function __construct($apiUrl = 'https://xb.xhawala.com/connection.php') {
+    public function __construct($apiUrl = 'https://xb.xhawala.com/testConn.php') {
         $this->apiUrl = $apiUrl;
     }
 
