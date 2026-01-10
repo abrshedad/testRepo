@@ -66,6 +66,8 @@ class GameServer implements MessageComponentInterface {
             $id = $row['No'];
             $num = $row['UserName']; // adjust field if different
 
+            echo "\n".$id." ::: ".$num;
+
             if ($id > $this->lastInsertId) {
                 $this->lastInsertId = $id;
                 $this->sentNumbers[] = $num;
