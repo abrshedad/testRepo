@@ -51,10 +51,10 @@ class GameServer implements MessageComponentInterface {
         $response = curl_exec($ch);
         curl_close($ch);
 
-        if (!$response) {
-            echo "API fetch failed\n";
-            return;
-        }
+if ($response === false) {
+    echo "CURL ERROR: " . curl_error($ch) . "\n";
+    return;
+}
 
         $data = json_decode($response, true);
         if (!$data || !isset($data['latest_rows'])) {
