@@ -135,18 +135,17 @@ class GameServer implements MessageComponentInterface {
         });
     }
 
-    /** 🔗 WebSocket Handlers */
     public function onOpen(ConnectionInterface $client) {
-        $this->clients->attach($clientConn);
-        echo "New connection: {$clientConn->resourceId}\n";
-
-        $clientConn->send(json_encode([
-            'type' => 'status',
+        $this->clients->attach($client);
+        echo "New connection: {$client->resourceId}\n";
+    
+        $client->send(json_encode([
+            'type'    => 'status',
             'running' => $this->running,
-            'paused' => $this->paused,
-            'all' => $this->sentNumbers
+            'paused'  => $this->paused,
+            'all'     => $this->sentNumbers
         ]));
-
+    
         if ($this->running === false && $this->refresh === false) {
             $this->startPostGameTimer(2);
         }
