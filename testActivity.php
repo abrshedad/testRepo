@@ -70,6 +70,8 @@ function afterGoodBingoAction(): bool
 
     $data = json_decode($response, true);
 
+    print_r($response);
+
     return is_array($data) && ($data['success'] ?? false) === true;
 }
 
