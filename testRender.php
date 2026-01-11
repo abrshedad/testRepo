@@ -343,7 +343,7 @@ class GameServer implements MessageComponentInterface {
             $phoneCartelas,
             $this->lastShownNumber
         );
-        $allResults = callAPi('checkBingoWinners',['PhoneCartelas'=>$phoneCartelas,'LastShownNumber'=>lastShownNumber])
+        $allResults = callAPi('checkBingoWinners',['PhoneCartelas'=>$phoneCartelas,'LastShownNumber'=>$this->lastShownNumber]);
         /*
           Expected result:
           [
