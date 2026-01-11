@@ -20,6 +20,17 @@ class GameServer implements MessageComponentInterface {
     protected $apiUrl;
     protected $lastInsertId = 0;
     protected $sentNumbers = [];
+    protected $clients;
+    protected $timer;
+    protected $running = false;
+    protected $paused = false;
+    protected $refresh = false;
+    protected $lastShownNumber = 0 ;
+    protected $sentNumbers = [];
+    protected $goodBingoTimer;
+    protected $gameStartTimer;
+    protected $conn;
+    protected $gameSpeed = 3;
 
     public function __construct($loop, $apiUrl) {
         $this->clients = new \SplObjectStorage;
@@ -31,18 +42,6 @@ class GameServer implements MessageComponentInterface {
         $this->loop->addPeriodicTimer(5, function () {
             echo "fetch data\n";
             // $this->fetchDataFromApi();
-        });
-
-        // Timer 2: fetch status from testActivity.php
-        $this->loop->addPeriodicTimer(5, function () {
-            echo "fetch status from testActivity\n";
-            $status = getDetail();
-            print_r($status);
-            if ($status !== null) {
-                foreach ($this->clients as $client) {
-                    $client->send(json_encode($status));
-                }
-            }
         });
     }
 
@@ -103,15 +102,56 @@ class GameServer implements MessageComponentInterface {
         }
     }
 
+    /** 🔁 START POST-GAME TIMER WITH RETRY LOGIC */
+    private function startPostGameTimer($secs) {
+        if ($this->goodBingoTimer) {
+            $this->loop->cancelTimer($this->goodBingoTimer);
+        }
+
+        echo "⏳ 15-second post-game timer started...\n";
+
+        $this->goodBingoTimer = $this->loop->addTimer($secs, function () {
+            $success = afterGoodBingoAction();
+
+            if (!$success) {
+                echo "🔁 Action failed — retrying in 5s\n";
+                // Retry after 5 seconds
+                $this->loop->addTimer(5, function () {
+                    $this->startPostGameTimer(0);
+                });
+                return;
+            }
+
+            echo "📢 Sending refresh message to all clients\n";
+
+            $refreshMessage = json_encode([
+                'type'    => 'refresh',
+                'message' => 'Betting is started... &#128523;'
+            ]);
+
+            foreach ($this->clients as $client) {
+                $client->send($refreshMessage);
+            }
+
+            //$this->startBetting(40);
+        });
+    }
+
     /** 🔗 WebSocket Handlers */
     public function onOpen(ConnectionInterface $client) {
-        $this->clients->attach($client);
-        echo "New connection: {$client->resourceId}\n";
+        $this->clients->attach($clientConn);
+        echo "New connection: {$clientConn->resourceId}\n";
 
-        $client->send(json_encode([
+        $clientConn->send(json_encode([
             'type' => 'status',
+            'running' => $this->running,
+            'paused' => $this->paused,
             'all' => $this->sentNumbers
         ]));
+
+        if ($this->running === false && $this->refresh === false) {
+            $this->startPostGameTimer(2);
+        }
     }
 
     public function onMessage(ConnectionInterface $from, $msg) {
