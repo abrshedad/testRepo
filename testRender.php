@@ -338,11 +338,7 @@ class GameServer implements MessageComponentInterface {
         /* -------------------------------------------------
            2️⃣ Check bingo ONLY for requested cartelas
         ------------------------------------------------- */
-        $allResults = checkBingoWinners(
-            $this->conn,
-            $phoneCartelas,
-            $this->lastShownNumber
-        );
+        
         $allResults = callAPi('checkBingoWinners',['PhoneCartelas'=>$phoneCartelas,'LastShownNumber'=>$this->lastShownNumber]);
         /*
           Expected result:
