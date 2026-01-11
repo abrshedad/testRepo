@@ -20,7 +20,6 @@ class GameServer implements MessageComponentInterface {
     protected $apiUrl;
     protected $lastInsertId = 0;
     protected $sentNumbers = [];
-    protected $clients;
     protected $timer;
     protected $running = false;
     protected $paused = false;
