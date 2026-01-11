@@ -50,7 +50,7 @@ function afterGoodBingoAction(): bool
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_HTTPHEADER => [
-            "X-API-KEY: " . getenv('BINGO_API_KEY'),
+            "X-API-KEY: 8f4d9c7a2b1e6f3d9a0b5c1e7f2d4a6b",
             "Content-Type: application/json",
             "User-Agent: Render-WebSocket/1.0"
         ],
