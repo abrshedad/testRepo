@@ -133,10 +133,151 @@ class GameServer implements MessageComponentInterface {
                 $client->send($refreshMessage);
             }
 
-            //$this->startBetting(40);
+            $this->startBetting(40);
         });
     }
 
+    /** 🔁 START BETTING TIMER WITH RETRY LOGIC */
+    private function startBetting($secs) {
+        $this->running = false;
+        $this->paused = false;
+        $this->refresh = true;
+        $this->startPeriodicRefresh($secs);
+
+        if ($this->gameStartTimer) {
+            $this->loop->cancelTimer($this->gameStartTimer);
+        }
+
+        echo "⏳ 1-minute post-game timer started...\n";
+
+        $this->gameStartTimer = $this->loop->addTimer(40, function () {
+            // Check if all cartelas are taken
+            if (checkIfAllCartelasTaken($this->conn)) {
+                echo "✅ All cartelas taken — starting game immediately\n";
+                $this->startGameImmediately();
+                return;
+            }
+
+            $this->startGameImmediately();
+        });
+    }
+
+    private function startGameImmediately() {
+        // 1️⃣ Check number of players before starting
+        $numPlayers = checkNoOfPlayers($this->conn);
+        if ($numPlayers <= 1) {
+            echo "⚠️ Not enough players ($numPlayers) — restarting timer\n";
+            $this->startBetting(40); // or any default timer seconds you want
+            return; // stop further execution
+        }
+
+        // 2️⃣ Cancel any existing timer
+        if ($this->gameStartTimer) {
+            $this->loop->cancelTimer($this->gameStartTimer);
+            $this->gameStartTimer = null;
+        }
+
+        $success = startTheGame();
+
+        if (!$success) {
+            echo "🔁 Action failed — retrying in 5s\n";
+            $this->loop->addTimer(5, function () {
+                $this->startBetting(0);
+            });
+            return;
+        }
+
+        echo "📢 Bingo is now starting\n";
+
+        // 3️⃣ Start the game
+        $this->running = true;
+        $this->paused = false;
+        $this->refresh = false;
+        $this->sentNumbers = [];
+
+        $startMessage = json_encode(['type' => 'start']);
+        foreach ($this->clients as $c) {
+            $c->send($startMessage);
+        }
+
+        $this->startGame();
+    }
+    
+    /** 🔢 START GAME NUMBERS */
+    public function startGame() {
+    
+        if ($this->timer) {
+            $this->loop->cancelTimer($this->timer);
+            $this->lastShownNumber = 0;
+        }
+    
+        $this->timer = $this->loop->addPeriodicTimer($this->gameSpeed, function () {
+    
+            if (!$this->running || $this->paused) {
+                return;
+            }
+    
+            // 🔹 Fetch the winners string and current position from the API
+            $apiResponse = callApi('getCurrentWinners'); // custom API endpoint
+            if (!$apiResponse || !isset($apiResponse['success']) || $apiResponse['success'] !== true) {
+                error_log("Failed to fetch winners from API.");
+                return;
+            }
+    
+            $res = $apiResponse['Winners'];            // winners string
+            $cpos = (int)$apiResponse['NoOfWinnersShown']; // current position
+    
+            if ($cpos >= strlen($res)) {
+                error_log("All numbers shown. Stopping.");
+    
+                if ($this->timer) {
+                    $this->loop->cancelTimer($this->timer);
+                    $this->timer = null;
+                }
+    
+                // Optional: start post-game actions if no cartela is taken
+                $cartelaResponse = callApi('isNoCartelaTaken');
+                if ($cartelaResponse && isset($cartelaResponse['success']) && $cartelaResponse['success'] === true) {
+                    $this->running = true;
+                    $this->paused = false;
+                    $this->refresh = false;
+                    $this->sentNumbers = [];
+    
+                    $this->startPostGameTimer(5);
+                }
+    
+                return;
+            }
+    
+            $numStr = substr($res, $cpos, 2);
+            $random = (int)$numStr;
+            $this->sentNumbers[] = $random;
+    
+            $message = json_encode([
+                'type' => 'number',
+                'value' => $random,
+                'all' => $this->sentNumbers
+            ]);
+    
+            $this->lastShownNumber = $random;
+    
+            // 🔹 Update the current position via API
+            $updateResponse = callApi('updateWinnersPosition', [
+                'NoOfWinnersShown' => $cpos + 2
+            ]);
+    
+            if (!$updateResponse || ($updateResponse['success'] ?? false) !== true) {
+                error_log("Failed to update winners position via API.");
+                return;
+            }
+    
+            // 🔹 Send the number to all connected clients
+            foreach ($this->clients as $client) {
+                $client->send($message);
+            }
+        });
+    }
+        
     public function onOpen(ConnectionInterface $client) {
         $this->clients->attach($client);
         echo "New connection: {$client->resourceId}\n";
