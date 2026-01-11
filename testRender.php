@@ -471,7 +471,7 @@ class GameServer implements MessageComponentInterface {
             if ($this->timer && $this->timer != null) {
                 $this->paused  = false;
                 $this->refresh = false;
-            } else if (isNoCartelaTaken($this->conn)) {
+            } else if (callApi('isNoCartelaTaken')) {
                 $this->running     = true;
                 $this->paused      = false;
                 $this->refresh     = false;
