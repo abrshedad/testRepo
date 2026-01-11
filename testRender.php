@@ -162,6 +162,44 @@ class GameServer implements MessageComponentInterface {
         });
     }
 
+    private function startPeriodicRefresh($secs) {
+        // Periodic refresh for inactive betting
+        static $countdownTimer = null; // track the countdown timer
+        static $remainingTime = 0;
+
+        // Cancel existing countdown if running
+        if ($countdownTimer) {
+            $this->loop->cancelTimer($countdownTimer);
+            $countdownTimer = null;
+        }
+
+        $remainingTime = $secs;
+
+        // Start a new countdown timer
+        $countdownTimer = $this->loop->addPeriodicTimer(1, function() use (&$remainingTime, &$countdownTimer) {
+            if ($remainingTime <= 0) {
+                echo "\n⏱ Countdown finished.\n";
+                $this->loop->cancelTimer($countdownTimer);
+                $countdownTimer = null;
+                return;
+            }
+
+            // Send remaining time to all clients
+            $refreshMessage = json_encode([
+                'type' => 'refresh',
+                'message' => 'Betting is started... &#128523;',
+                'remainingTime' => $remainingTime
+            ]);
+
+            foreach ($this->clients as $client) {
+                $client->send($refreshMessage);
+            }
+
+            //echo "⏱ Time remaining: {$remainingTime}s\r";
+            $remainingTime--;
+        });
+    }
+
     private function startGameImmediately() {
         // 1️⃣ Check number of players before starting
         $numPlayers = checkNoOfPlayers($this->conn);
