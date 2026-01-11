@@ -300,8 +300,8 @@ class GameServer implements MessageComponentInterface {
             $this->lastShownNumber = $random;
     
             // 🔹 Update the current position via API
-            $updateResponse = callApi( [
-                'NoOfWinnersShown' => $cpos + 2,'updateWinnersPosition'
+            $updateResponse = callApi('updateWinnersPosition', [
+                'NoOfWinnersShown' => $cpos + 2
             ]);
     
             if (!$updateResponse || ($updateResponse['success'] ?? false) !== true) {
