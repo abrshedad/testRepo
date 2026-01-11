@@ -25,7 +25,6 @@ class GameServer implements MessageComponentInterface {
     protected $paused = false;
     protected $refresh = false;
     protected $lastShownNumber = 0 ;
-    protected $sentNumbers = [];
     protected $goodBingoTimer;
     protected $gameStartTimer;
     protected $conn;
