@@ -12,7 +12,7 @@ function callApi(string $purpose, array $data = []): ?array {
 
     $ch = curl_init($apiUrl);
 
-    $postData = array_merge($data, ['Purpose' => $purpose]);
+    $postData = array_merge(['Data' => $data], ['Purpose' => $purpose]);
 
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
