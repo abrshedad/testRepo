@@ -62,17 +62,17 @@ function afterGoodBingoAction(): bool
     $response = curl_exec($ch);
 
     if ($response === false) {
+        echo "CURL ERROR: " . curl_error($ch) . PHP_EOL;
         curl_close($ch);
         return false;
     }
 
     curl_close($ch);
 
-    $data = json_decode($response, true);
+    // ✅ Echo RAW server response
+    echo "Server response: " . $response . PHP_EOL;
 
-    print_r($response);
+    $data = json_decode($response, true);
 
     return is_array($data) && ($data['success'] ?? false) === true;
 }
-
-
