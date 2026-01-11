@@ -40,6 +40,8 @@ class GameServer implements MessageComponentInterface {
         $this->loop->addPeriodicTimer(5, function () {
             echo "fetch data\n";
             // $this->fetchDataFromApi();
+            $res = getDetail();
+            print_r($res);
         });
     }
 
