@@ -479,7 +479,7 @@ class GameServer implements MessageComponentInterface {
                 ]));
             }
 
-            mysqli_query($this->conn, "UPDATE currentactivity SET Playing = 1");
+            callApi('resetPlayingStatus');
         });
     }
         
