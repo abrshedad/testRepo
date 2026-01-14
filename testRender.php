@@ -103,6 +103,9 @@ class GameServer implements MessageComponentInterface {
         if ($this->goodBingoTimer) {
             $this->loop->cancelTimer($this->goodBingoTimer);
         }
+        $this->winnersString = null;
+        $this->currentPosition = 0;
+
 
         echo "⏳ 15-second post-game timer started...\n";
 
