@@ -29,6 +29,8 @@ class GameServer implements MessageComponentInterface {
     protected $gameStartTimer;
     protected $conn;
     protected $gameSpeed = 3;
+    private ?string $winnersString = null;
+    private int $currentPosition = 0;
 
     public function __construct($loop, $apiUrl) {
         $this->clients = new \SplObjectStorage;
@@ -243,23 +245,35 @@ class GameServer implements MessageComponentInterface {
             $this->lastShownNumber = 0;
         }
     
+        // 🔹 Load winners only once at game start
+        if ($this->winnersString === null) {
+            $apiResponse = callApi('getCurrentWinners');
+    
+            if (
+                !$apiResponse ||
+                !isset($apiResponse['success']) ||
+                $apiResponse['success'] !== true
+            ) {
+                error_log("Failed to fetch winners from API.");
+                return;
+            }
+    
+            $this->winnersString  = $apiResponse['Winners'];
+            $this->currentPosition = (int)$apiResponse['NoOfWinnersShown'];
+        }
+    
         $this->timer = $this->loop->addPeriodicTimer($this->gameSpeed, function () {
     
             if (!$this->running || $this->paused) {
                 return;
             }
     
-            // 🔹 Fetch the winners string and current position from the API
-            $apiResponse = callApi('getCurrentWinners'); // custom API endpoint
-            if (!$apiResponse || !isset($apiResponse['success']) || $apiResponse['success'] !== true) {
-                error_log("Failed to fetch winners from API.");
+            // 🔹 If winners string is cleared, stop game
+            if ($this->winnersString === null) {
                 return;
             }
     
-            $res = $apiResponse['Winners'];            // winners string
-            $cpos = (int)$apiResponse['NoOfWinnersShown']; // current position
-    
-            if ($cpos >= strlen($res)) {
+            if ($this->currentPosition >= strlen($this->winnersString)) {
                 error_log("All numbers shown. Stopping.");
     
                 if ($this->timer) {
@@ -267,9 +281,17 @@ class GameServer implements MessageComponentInterface {
                     $this->timer = null;
                 }
     
-                // Optional: start post-game actions if no cartela is taken
+                // 🔹 Reset cached data
+                $this->winnersString = null;
+                $this->currentPosition = 0;
+    
+                // Optional post-game logic
                 $cartelaResponse = callApi('isNoCartelaTaken');
-                if ($cartelaResponse && isset($cartelaResponse['success']) && $cartelaResponse['success'] === true && $cartelaResponse['noCartelaTaken'] === 0) {
+                if (
+                    $cartelaResponse &&
+                    ($cartelaResponse['success'] ?? false) === true &&
+                    $cartelaResponse['noCartelaTaken'] === 0
+                ) {
                     $this->running = true;
                     $this->paused = false;
                     $this->refresh = false;
@@ -281,29 +303,33 @@ class GameServer implements MessageComponentInterface {
                 return;
             }
     
-            $numStr = substr($res, $cpos, 2);
+            // 🔹 Extract number
+            $numStr = substr($this->winnersString, $this->currentPosition, 2);
             $random = (int)$numStr;
             $this->sentNumbers[] = $random;
     
             $message = json_encode([
-                'type' => 'number',
+                'type'  => 'number',
                 'value' => $random,
-                'all' => $this->sentNumbers
+                'all'   => $this->sentNumbers
             ]);
     
             $this->lastShownNumber = $random;
     
-            // 🔹 Update the current position via API
+            // 🔹 Update position locally
+            $this->currentPosition += 2;
+    
+            // 🔹 Persist position to API
             $updateResponse = callApi('updateWinnersPosition', [
-                'NoOfWinnersShown' => $cpos + 2
+                'NoOfWinnersShown' => $this->currentPosition
             ]);
     
-            if (!$updateResponse || ($updateResponse['success'] ?? false) !== true) {
+            if (($updateResponse['success'] ?? false) !== true) {
                 error_log("Failed to update winners position via API.");
                 return;
             }
     
-            // 🔹 Send the number to all connected clients
+            // 🔹 Send to clients
             foreach ($this->clients as $client) {
                 $client->send($message);
             }
