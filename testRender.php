@@ -455,7 +455,8 @@ class GameServer implements MessageComponentInterface {
 
                 foreach ($winnerPhones as $phone) {
                     error_log("Paying winner $phone | Total winners: $totalWinners");
-                    payWinner($this->conn, $phone, $totalWinners);
+                    //payWinner($this->conn, $phone, $totalWinners);
+                    callApi('payWinner', ['Phone' => $phone,'TotalWinners' => $totalWinners]);
                 }
 
                 $this->startPostGameTimer(3);
