@@ -305,7 +305,7 @@ class GameServer implements MessageComponentInterface {
                     // Delay execution by 30 seconds
                     sleep(30);  // PHP pauses execution for 30 seconds
                 
-                    $this->startPostGameTimer(5);
+                    $this->startPostGameTimer(0);
                 }
     
                 return;
