@@ -23,7 +23,7 @@ function callApi(string $purpose, array $data = []): ?array {
         ],
         CURLOPT_POST => true,
         CURLOPT_POSTFIELDS => json_encode($postData),
-        CURLOPT_TIMEOUT => 5
+        CURLOPT_TIMEOUT => 8
     ]);
 
     $response = curl_exec($ch);
