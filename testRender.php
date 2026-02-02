@@ -357,7 +357,7 @@ class GameServer implements MessageComponentInterface {
     
             if (($updateResponse['success'] ?? false) !== true) {
                 error_log("Failed to update winners position via API.");
-                return;
+                //return;
             }
     
             // 🔹 Send to clients
