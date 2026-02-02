@@ -62,7 +62,18 @@ function checkIfAllCartelasTaken(): bool {
 
 function checkNoOfPlayers(): int {
     $data = callApi('checkNoOfPlayers');
-    error_log("No of takens: ".$data['count']." : ".$data['success']);
+
+    // Check if API returned something valid
+    if (is_array($data)) {
+        $count   = isset($data['count']) ? $data['count'] : 'N/A';
+        $success = isset($data['success']) ? $data['success'] : 'N/A';
+    
+        error_log("No of takens: {$count} : success={$success}");
+    } else {
+        // API call failed completely
+        error_log("API call failed, returned: " . var_export($data, true));
+    }
+
     return isset($data['success'], $data['count']) && $data['success'] === true
         ? (int)$data['count']
         : 0;
