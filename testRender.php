@@ -250,20 +250,41 @@ class GameServer implements MessageComponentInterface {
     
         // 🔹 Load winners only once at game start
         if ($this->winnersString === null) {
-            $apiResponse = callApi('getCurrentWinners');
-    
-            if (
-                !$apiResponse ||
-                !isset($apiResponse['success']) ||
-                $apiResponse['success'] !== true
-            ) {
-                error_log("Failed to fetch winners from API.");
+        
+            $maxRetries = 3;
+            $attempts = 0;
+        
+            while ($attempts < $maxRetries) {
+                $apiResponse = callApi('getCurrentWinners');
+        
+                $attempts++;
+        
+                if ($apiResponse && isset($apiResponse['success']) && $apiResponse['success'] === true) {
+                    // Success! Save the data
+                    $this->winnersString   = $apiResponse['Winners'];
+                    $this->currentPosition = (int) $apiResponse['NoOfWinnersShown'];
+                    break;
+                }
+        
+                // Log detailed failure info
+                $reason = 'Unknown error';
+                if ($apiResponse === false) {
+                    $reason = 'API did not respond or returned false';
+                } elseif (!isset($apiResponse['success'])) {
+                    $reason = 'Missing success key in API response';
+                } elseif ($apiResponse['success'] !== true) {
+                    $reason = 'API reported success=false';
+                }
+        
+                error_log("Attempt {$attempts}: Failed to fetch winners from API. Reason: {$reason}");
+            }
+        
+            if ($this->winnersString === null) {
+                error_log("Giving up after {$maxRetries} attempts.");
                 return;
             }
-    
-            $this->winnersString  = $apiResponse['Winners'];
-            $this->currentPosition = (int)$apiResponse['NoOfWinnersShown'];
         }
+
     
         $this->timer = $this->loop->addPeriodicTimer($this->gameSpeed, function () {
     
