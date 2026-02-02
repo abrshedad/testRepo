@@ -36,7 +36,7 @@ function callApi(string $purpose, array $data = []): ?array {
 
     curl_close($ch);
 
-    //echo "Server response for '$purpose': " . $response . PHP_EOL;
+    echo "Server response for '$purpose': " . $response . PHP_EOL;
 
     $data = json_decode($response, true);
 
