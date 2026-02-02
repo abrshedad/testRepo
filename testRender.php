@@ -349,16 +349,17 @@ class GameServer implements MessageComponentInterface {
     
             // 🔹 Update position locally
             $this->currentPosition += 2;
+            echo "Position : ".$this->currentPosition;
     
             // 🔹 Persist position to API
-            $updateResponse = callApi('updateWinnersPosition', [
+            /*$updateResponse = callApi('updateWinnersPosition', [
                 'NoOfWinnersShown' => $this->currentPosition
             ]);
     
             if (($updateResponse['success'] ?? false) !== true) {
                 error_log("Failed to update winners position via API.");
                 //return;
-            }
+            }*/
     
             // 🔹 Send to clients
             foreach ($this->clients as $client) {
@@ -398,8 +399,11 @@ class GameServer implements MessageComponentInterface {
         
         $allResults = callApi('checkBingoWinners', [
             'PhoneCartelas' => $phoneCartelas,
-            'LastShownNumber'=> $this->lastShownNumber
+            'LastShownNumber'=> $this->lastShownNumber,
+            'NoOfWinnersShown' => $this->currentPosition
         ]);
+
+        echo "DATA SEND : ".$this->currentPosition;
         
         if (!is_array($allResults)) {
             echo "All results is : ".$allResults;
