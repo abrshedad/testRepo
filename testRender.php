@@ -311,8 +311,7 @@ class GameServer implements MessageComponentInterface {
     
                 // Optional post-game logic
                 $cartelaResponse = callApi('isNoCartelaTaken');
-                if (
-                    $cartelaResponse &&
+                if ($cartelaResponse &&
                     ($cartelaResponse['success'] ?? false) === true &&
                     $cartelaResponse['noCartelaTaken'] === 0
                 ) {
@@ -349,7 +348,6 @@ class GameServer implements MessageComponentInterface {
     
             // 🔹 Update position locally
             $this->currentPosition += 2;
-            echo "Position : ".$this->currentPosition;
     
             // 🔹 Persist position to API
             /*$updateResponse = callApi('updateWinnersPosition', [
