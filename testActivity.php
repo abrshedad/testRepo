@@ -62,7 +62,7 @@ function checkIfAllCartelasTaken(): bool {
 
 function checkNoOfPlayers(): int {
     $data = callApi('checkNoOfPlayers');
-    error_log("No of takens: ".$data);
+    error_log("No of takens: ".$data['count']." : ".$data['success']);
     return isset($data['success'], $data['count']) && $data['success'] === true
         ? (int)$data['count']
         : 0;
