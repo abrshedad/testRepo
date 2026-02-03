@@ -341,7 +341,8 @@ class GameServer implements MessageComponentInterface {
             $message = json_encode([
                 'type'  => 'number',
                 'value' => $random,
-                'all'   => $this->sentNumbers
+                'all'   => $this->sentNumbers,
+                'shownNumbers' => $this->currentPosition
             ]);
     
             $this->lastShownNumber = $random;
