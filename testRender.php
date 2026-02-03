@@ -89,7 +89,8 @@ class GameServer implements MessageComponentInterface {
             $msg = json_encode([
                 'type' => 'number',
                 'value' => $num,
-                'all' => $this->sentNumbers
+                'all' => $this->sentNumbers,
+                'shownNumbers' => $this->currentPosition
             ]);
 
             foreach ($this->clients as $client) {
