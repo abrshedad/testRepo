@@ -7,12 +7,13 @@ $userAgent = "Render-WebSocket/1.0";
 /**
  * Generic function to make a POST request to the API
  */
-function callApi(string $purpose, array $data = [], int $timeout = 8, int $retries = 3): ?array {
+function callApi(string $purpose, array $data = [], int $timeout = 15, int $retries = 3): ?array {
     global $apiUrl, $apiKey, $userAgent;
 
     $postData = ['Purpose' => $purpose, 'Data' => $data];
 
     for ($attempt = 1; $attempt <= $retries; $attempt++) {
+
         $ch = curl_init($apiUrl);
 
         curl_setopt_array($ch, [
@@ -24,30 +25,44 @@ function callApi(string $purpose, array $data = [], int $timeout = 8, int $retri
             ],
             CURLOPT_POST => true,
             CURLOPT_POSTFIELDS => json_encode($postData),
+
+            // Increased time limits
             CURLOPT_TIMEOUT => $timeout,
-            CURLOPT_CONNECTTIMEOUT => 5
+            CURLOPT_CONNECTTIMEOUT => 10,
+
+            // Better stability
+            CURLOPT_TCP_KEEPALIVE => 1,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2
         ]);
 
         $response = curl_exec($ch);
 
         if ($response !== false) {
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             curl_close($ch);
-            $decoded = json_decode($response, true);
-            if (is_array($decoded)) return $decoded;
-            error_log("Invalid JSON returned from API (Purpose: $purpose): $response");
-            return null;
+
+            if ($httpCode >= 200 && $httpCode < 300) {
+                $decoded = json_decode($response, true);
+                if (is_array($decoded)) return $decoded;
+
+                error_log("Invalid JSON returned from API (Purpose: $purpose): $response");
+                return null;
+            }
+
+            error_log("HTTP ERROR $httpCode (Purpose: $purpose): $response");
+        } else {
+            $error = curl_error($ch);
+            error_log("CURL ERROR (Purpose: $purpose, Attempt $attempt): $error");
         }
 
-        $error = curl_error($ch);
         curl_close($ch);
 
-        if ($attempt === $retries) {
-            error_log("CURL ERROR (Purpose: $purpose, Attempt $attempt): $error");
-            return null;
+        // Exponential backoff instead of fixed delay
+        if ($attempt < $retries) {
+            usleep(300000 * $attempt); // 300ms, 600ms, 900ms
         }
-
-        // Wait a short time before retry
-        usleep(200000); // 200ms
     }
 
     return null;
