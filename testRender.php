@@ -113,14 +113,14 @@ class GameServer implements MessageComponentInterface {
         $this->goodBingoTimer = $this->loop->addTimer($secs, function () {
             $success = afterGoodBingoAction();
 
-            /*if (!$success) {
+            if (!$success) {
                 echo "🔁 Action failed — retrying in 5s\n";
                 // Retry after 5 seconds
                 $this->loop->addTimer(5, function () {
                     $this->startPostGameTimer(0);
                 });
                 return;
-            }*/
+            }
 
             echo "📢 Sending refresh message to all clients\n";
 
